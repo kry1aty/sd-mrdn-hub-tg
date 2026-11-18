@@ -101,6 +101,32 @@ async def health_check():
 
 
 # ============================================================================
+# 0. ПРОКСИ TELEGRAM BOT API (Для вызовов из SD.MRDN, где Telegram заблокирован)
+# ============================================================================
+@app.post("/bot{token}/sendMessage")
+async def telegram_send_message_proxy(token: str, request: Request):
+    """Прозрачный прокси вызова sendMessage на api.telegram.org."""
+    body = await request.json()
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    assert http_client is not None
+    try:
+        resp = await http_client.post(url, json=body)
+        return Response(
+            content=resp.content,
+            status_code=resp.status_code,
+            media_type=resp.headers.get("content-type", "application/json"),
+        )
+    except Exception as exc:
+        logger.error("Ошибка проксирования в Telegram: %s", exc)
+        return Response(
+            content=f'{{"ok":false,"description":"Proxy error: {exc}"}}',
+            status_code=502,
+            media_type="application/json",
+        )
+
+
+
+# ============================================================================
 # 1. ПРИЁМНИК GITLAB CI/CD WEBHOOK
 # ============================================================================
 @app.post("/gitlab-webhook")
