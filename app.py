@@ -107,7 +107,20 @@ async def health_check():
 async def telegram_send_message_proxy(token: str, request: Request):
     """Прозрачный прокси вызова sendMessage на api.telegram.org."""
     body = await request.json()
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
+
+    # Если токен не указан или передан плейсхолдер — берём токен бота из окружения Bothost
+    actual_token = TELEGRAM_BOT_TOKEN if (not token or token in ("internal", "hub", "bothost", "default")) else token
+
+    # Умная маршрутизация псевдонимов чатов:
+    chat_id = str(body.get("chat_id", "")).strip()
+    if chat_id in ("admin", "user") and TELEGRAM_USER_CHAT_ID:
+        body["chat_id"] = TELEGRAM_USER_CHAT_ID
+    elif chat_id in ("group", "supergroup", "topic") and TELEGRAM_GROUP_CHAT_ID:
+        body["chat_id"] = TELEGRAM_GROUP_CHAT_ID
+        if TELEGRAM_TOPIC_ID and "message_thread_id" not in body:
+            body["message_thread_id"] = int(TELEGRAM_TOPIC_ID)
+
+    url = f"https://api.telegram.org/bot{actual_token}/sendMessage"
     assert http_client is not None
     try:
         resp = await http_client.post(url, json=body)
